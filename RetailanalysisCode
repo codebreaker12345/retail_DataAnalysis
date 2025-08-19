@@ -1,0 +1,183 @@
+-- Practice analysis Day1 
+/*
+
+- Total revenue per region
+- Top 5 products by revenue
+- Average order value per customer
+- Revenue trend per month
+*/
+
+-- regional performance *east slightly lower than rest* good spread
+select 
+	sum(revenue) as totalRev
+	,Region 
+from [dbo].[retail_sales_dataset] 
+group by region
+order by totalRev  desc
+
+
+-- Top 5 products by revenue -- furniture and electronics driving revenue ( monitors, office chair, headphones)
+select 
+	product
+	,sum(Revenue) totalRev
+from [dbo].[retail_sales_dataset] 
+group by product
+order by totalRev  desc
+
+select 
+	Category
+	,sum(Revenue) totalRev
+from [dbo].[retail_sales_dataset] 
+group by Category
+order by totalRev  desc
+
+
+-- Average order value per customer (John Smith & Jane roe vip customers)
+select 
+	distinct customer -- normally use some sort of id
+	,round(sum(revenue)/count(distinct orderid),2) as AOV
+from [dbo].[retail_sales_dataset] 
+group by customer
+order by aov desc
+
+-- Revenue trend per month
+-- take at day level for visualising (line graph)
+select 
+	date
+	,sum(Revenue) as totalRev
+from [dbo].[retail_sales_dataset] 
+group by date 
+order by date
+
+-- best perfomring months Feb, August, Decemeber & Novemeber
+select 
+DATEPART(month,date) as monthc
+,sum(Revenue) as totalRev
+from [dbo].[retail_sales_dataset] 
+group by DATEPART(month,date)
+order by totalRev desc
+
+
+-- day 2 
+/*
+Deeper Analysis
+----------------------------------------------
+Customer segmentation – Top 10 customers by spend, frequency of purchase, and product preference.
+Basket analysis – Which products are often bought together? (requires a bit of grouping logic).
+Profit margin simulation – Add a fake CostPrice column to calculate profit by category/region.
+Seasonal product mix – Which categories spike in which months?
+*/
+
+ 
+ --Customer segmentation – Top 10 customers by spend, frequency of purchase, and product preference.
+
+ --Top 10 customers by spend ( jane roe, maria garcia highest spenders)
+ SELECT distinct Top 10
+	 CUSTOMER -- Usuallly would be an ID 
+	,sum(revenue) as totalRevenue
+ from [dbo].[retail_sales_dataset]
+ GROUP BY  CUSTOMER
+ order by totalRevenue desc
+ 
+ --frequency of purchase, and product preference.
+-- john smith orders leww often but a high revenue -> worth investigating 
+ SELECT distinct Top 10
+	 CUSTOMER -- Usuallly would be an ID 
+	,count(distinct orderid) as freqOfPurchase
+	,sum(revenue) as totalRevenue
+ from [dbo].[retail_sales_dataset]
+ GROUP BY  CUSTOMER
+ order by freqOfPurchase desc
+ 
+ -- who prefers which products
+-- Jane and John favour monitors leading to most revenue -> market expensive electronics to other customers
+   SELECT distinct Top 10
+	 CUSTOMER -- Usuallly would be an ID 
+	,product
+	,count( product) as freqOfPurchase
+	,sum(revenue) as totalRevenue
+ from [dbo].[retail_sales_dataset]
+ GROUP BY  CUSTOMER,product
+ order by freqOfPurchase desc
+
+
+-- same for catergory Electronics most popular 
+   SELECT distinct Top 10
+	 CUSTOMER -- Usuallly would be an ID 
+	,Category
+	,count( Category) as freqOfPurchase
+	,sum(revenue) as totalRevenue
+ from [dbo].[retail_sales_dataset]
+ GROUP BY  CUSTOMER,Category
+ order by freqOfPurchase desc
+ 
+
+ --Basket analysis – Which products are often bought together?
+-- Desk lamp most commonly bought together with headphones and keyboards
+ select 
+--	a.OrderID
+	a.Product
+	,b.Product
+	,count(*) as combo_count
+ from 
+ [dbo].[retail_sales_dataset] a 
+ inner join [dbo].[retail_sales_dataset]  b 
+ on a.OrderID = b.orderID
+ AND a.Product < b.Product
+ group by a.Product,b.Product
+ 
+  -- CUSTOMER analysis what has been ordered within the same month by customers shows trends and what to promote to customers in their baskets 
+ -- monitor and pen set & headphones and monitor popular combinations (market this in a bundle to convert more)
+ select 
+	a.Product
+	,b.Product
+	,count(*) as customerwithinSameMonth
+ from 
+ [dbo].[retail_sales_dataset] a 
+ inner join [dbo].[retail_sales_dataset]  b 
+ on a.Customer = b.Customer
+ AND a.Product < b.Product
+ AND DATEPART(YEAR,a.[Date]) =   DATEPART(YEAR,b.[Date])   
+ AND DATEPART(MONTH,a.[Date]) =   DATEPART(MONTH,b.[Date])   
+group by a.Product,b.Product
+order by customerwithinSameMonth desc
+
+ select * from  [dbo].[retail_sales_dataset] a 
+
+ -- Seasonal product mix – Which categories spike in which months?
+ -- view at product level and see how quantity ordered & revenue changes over time 
+ select 
+	[Date]
+	,Product
+	,sum(quantity) as Daily_Order
+	,sum(revenue) as Daily_Revenue
+ from  [dbo].[retail_sales_dataset] a 
+ group by [Date],Product
+ order by [Date]
+ -- monthly  view to spot product trends 
+ select 
+	datename(month,[Date]) as monthname 
+	,datepart(month,[Date]) as monthnum 
+	,datepart(year,[Date]) as Year 
+	,Product
+	,sum(quantity) as Daily_Order
+	,sum(revenue) as Daily_Revenue
+ from  [dbo].[retail_sales_dataset] a 
+ group by datename(month,[Date]),datepart(month,[Date]),datepart(year,[Date]) ,Product
+order by monthnum
+
+ -- spotting CATEGORY trends 
+ -- spikes in total revenue driven by electronics sales 
+ select 
+	datename(month,[Date]) as monthname 
+	,datepart(month,[Date]) as monthnum 
+	,datepart(year,[Date]) as Year 
+	,Category
+	,sum(quantity) as Daily_Order
+	,sum(revenue) as Daily_Revenue
+ from  [dbo].[retail_sales_dataset] a 
+ group by datename(month,[Date]),datepart(month,[Date]),datepart(year,[Date]) ,Category
+order by monthnum
+
+
+
