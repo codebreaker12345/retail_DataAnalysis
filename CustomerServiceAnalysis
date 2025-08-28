@@ -1,1 +1,144 @@
+USE ChatGPT
+GO
+-- Week 2 Checklist:
+
+/************************************************************************
+Day 1 – SQL Drill
+
+- Tickets per month
+- Average resolution time per region
+- % of high-priority tickets resolved within SLA (e.g., 48 hours)
+- Top 5 most common issue types
+
+Day 2 – Excel Cleaning
+
+- Remove blanks, standardise text case for IssueType
+- Create a pivot: Resolution Time by Agent and Priority
+
+Day 3 – Dashboard
+
+- KPI cards: Tickets opened, Avg Resolution Time, SLA Compliance %
+- Chart: Issue Types by Volume
+- Chart: Monthly Ticket Trends
+
+Day 4 – Mini Project
+
+Question: “Which regions and agents need the most support training 
+based on ticket trends and resolution times?”
+*************************************************************************/
+-- ENSURING DATA TYPES ARE CORRECT AFTER IMPORT 
+SET DATEFORMAT DMY
+ALTER TABLE [dbo].[customer_support_tickets]
+--ALTER COLUMN DateOpened DATETIME
+--ALTER COLUMN AssignedDateTime DATETIME
+--ALTER COLUMN FirstResponseDateTime DATETIME
+--ALTER COLUMN DateClosed DATETIME
+
+-- Tickets per month shows fluctation: 
+--peak in decemeber and feb/march
+-- lows in Jan, April, May
+SELECT 
+	 DATEPART(MONTH,DateOpened) as monthreceivedticket
+	 ,DATENAME(MONTH,DateOpened) as month_name
+	,count(distinct ticketID)
+FROM [dbo].[customer_support_tickets]
+group by DATEPART(MONTH,DateOpened),DATENAME(MONTH,DateOpened)
+order by DATEPART(MONTH,DateOpened)
+
+-- Average resolution time per region - can drill down into priority and issue type
+-- Is it best to measure from assigned or first response time ? 
+
+-- leave out entries where dateclosed is null from reporting
+UPDATE [dbo].[customer_support_tickets]
+SET DateClosed = NULL
+WHERE DateClosed = '1900-01-01 00:00:00.000';
+
+--   add a flag missing/incorrectTimeStamp 
+ALTER TABLE [dbo].[customer_support_tickets]
+ADD [missing/incorrectTimeStamp] NVARCHAR(255)
+
+-- UPDATING missging Flag (where dateclosed is null)
+UPDATE [dbo].[customer_support_tickets]
+SET [missing/incorrectTimeStamp] = CASE WHEN DateClosed IS NULL THEN 'Y' ELSE [missing/incorrectTimeStamp] END 
+-- UPDATE FOR INCORRECT TIME STAMPS (WHERE MINUS HOURS WORKED)							
+UPDATE [dbo].[customer_support_tickets]
+SET [missing/incorrectTimeStamp] = CASE WHEN datediff(hour,AssignedDateTime,DateClosed) < 0 THEN 'Y' 
+										WHEN datediff(hour,firstresponseDateTime,DateClosed) < 0 THEN 'Y'
+										ELSE [missing/incorrectTimeStamp] END 
+
+-- FOR REPORTING keep data more granular -> adding to dashboard so grouping by region 
+ -- North region takes longer than others (Requires investigation to explain why -> more training? ,fewer staff, more difficult queries
+ -- can be done further at agent level
+ SELECT
+	region
+	--,Agent
+	--,ticketid
+	--,AssignedDateTime
+	--,firstresponseDateTime
+	--,DateClosed
+	 ,avg(datediff(hour,AssignedDateTime,DateClosed)) as AVGhoursfromassignment
+	,avg(datediff(hour,firstresponseDateTime,DateClosed)) as AVGhoursfromresponse
+	,count(distinct Agent) as Agents_Available
+	,count(case when priority like 'High' then 1 else 0 end) as HighPriorityCases
+FROM [dbo].[customer_support_tickets]
+where [missing/incorrectTimeStamp] IS NULL
+group  by Region
+order by avg(datediff(hour,firstresponseDateTime,DateClosed)) desc
+
+select * FROM [dbo].[customer_support_tickets] 
+ 
+-- most common issue by region *login issues and bugs* can these be autmoted to free up time ? 
+select 
+distinct issuetype
+,region
+,count(*) cnt
+FROM [dbo].[customer_support_tickets] 
+group by region,issuetype
+order by cnt desc 
+
+
+-- % of high-priority tickets resolved within SLA (e.g., 48 hours)
+-- Agent B high performer
+-- some error as there are unassigned tickets where no agent 
+
+SELECT * FROM [dbo].[customer_support_tickets] 
+UPDATE [dbo].[customer_support_tickets] 
+SET Priority = CASE WHEN Priority LIKE '%High%' THEN 'High'
+					WHEN Priority LIKE '%Medium%' THEN 'Medium'
+					WHEN Priority LIKE '%Low%' THEN 'Low' END
+
+select 
+	distinct Agent
+	,count(case when [Priority] like 'High' and ResolutionTimeHours <= '48' AND [Status] like 'closed' then 1 else null end) as HighPriorityCasessolvedinTime
+,count(distinct TicketID) as totalCases
+FROM [dbo].[customer_support_tickets] 
+--where [Status] like 'closed'
+group by agent
+
+select agent,avg(cast(resolutionTimeHours as int)) avgresolutionTime
+FROM [dbo].[customer_support_tickets]
+where [Status] like 'closed'
+ group by Agent
+
+ -- 69 TICKETS CANNOT ACCOUNT FOR THE AGENT THAT WORKED ON THEM
+select count(agent), count(case when agent not like '%agent%' then 1 else NULL end) blankagent 
+FROM [dbo].[customer_support_tickets] 
+
+
+select * FROM [dbo].[customer_support_tickets] 
+where Agent not like '%agent%'
+
+-- Top 5 most common issue types - Login, bugs , payment failures -> could a bot help sort most of these ? 
+select 
+	IssueType
+	,COUNT(DISTINCT TicketID) AS TOTAL
+FROM [dbo].[customer_support_tickets] 
+GROUP BY IssueType
+ORDER BY TOTAL DESC
+
+
+-- create view Power BI 
+-- vw_CustomerSupportTickets that already has
+--TicketID, Agent, Region, Priority, ResolutionTimeHours, Status, CreatedDate, etc.
+select *  FROM [dbo].[customer_support_tickets] 
 
